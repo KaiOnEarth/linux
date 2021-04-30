@@ -24,12 +24,22 @@
 #include "trace.h"
 #include "pmu.h"
 
+#include <asm/atomic.h>
+#include <asm/atomic64_64.h>
 /*
  * Unlike "struct cpuinfo_x86.x86_capability", kvm_cpu_caps doesn't need to be
  * aligned to sizeof(unsigned long) because it's not accessed via bitops.
  */
 u32 kvm_cpu_caps[NCAPINTS] __read_mostly;
 EXPORT_SYMBOL_GPL(kvm_cpu_caps);
+
+/*added for 283 assignment 2*/
+
+atomic64_t exit_number = ATOMIC64_INIT(0);
+atomic64_t exit_time = ATOMIC64_INIT(0);
+
+EXPORT_SYMBOL(exit_number);
+EXPORT_SYMBOL(exit_time);
 
 static u32 xstate_required_size(u64 xstate_bv, bool compacted)
 {
@@ -1129,6 +1139,7 @@ bool kvm_cpuid(struct kvm_vcpu *vcpu, u32 *eax, u32 *ebx,
 }
 EXPORT_SYMBOL_GPL(kvm_cpuid);
 
+/* changed for 283 assignment 2 */
 int kvm_emulate_cpuid(struct kvm_vcpu *vcpu)
 {
 	u32 eax, ebx, ecx, edx;
@@ -1138,7 +1149,20 @@ int kvm_emulate_cpuid(struct kvm_vcpu *vcpu)
 
 	eax = kvm_rax_read(vcpu);
 	ecx = kvm_rcx_read(vcpu);
-	kvm_cpuid(vcpu, &eax, &ebx, &ecx, &edx, false);
+	if (eax == 0x4fffffff) 
+	{
+		kvm_cpuid(vcpu, &eax, &ebx, &ecx, &edx, true);
+		eax = atomic64_read(&exit_number);
+		printk(KERN_INFO "The total number of exits (all types) in eax=%u", eax);
+		ebx = (atomic64_read(&exit_time) >> 32);
+		printk(KERN_INFO "High 32 bits of the total time spent in ebx=%u", ebx);
+		ecx = (atomic64_read(&exit_time) & 0xFFFFFFFF);
+		printk(KERN_INFO "Low 32 bits of the total time spent in ecx=%u", ecx);
+	}
+	else 
+	{
+		kvm_cpuid(vcpu, &eax, &ebx, &ecx, &edx, true);
+	}
 	kvm_rax_write(vcpu, eax);
 	kvm_rbx_write(vcpu, ebx);
 	kvm_rcx_write(vcpu, ecx);
