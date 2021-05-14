@@ -25,12 +25,22 @@
 #include "trace.h"
 #include "pmu.h"
 
+
+
 /*
  * Unlike "struct cpuinfo_x86.x86_capability", kvm_cpu_caps doesn't need to be
  * aligned to sizeof(unsigned long) because it's not accessed via bitops.
  */
 u32 kvm_cpu_caps[NR_KVM_CPU_CAPS] __read_mostly;
 EXPORT_SYMBOL_GPL(kvm_cpu_caps);
+
+//added for homework 2 & 3
+u64 exitNumber = 0;
+u64 exitTime = 0;
+EXPORT_SYMBOL(exitNumber);
+EXPORT_SYMBOL(exitTime);
+u32 exitCounter[69] = {0};
+EXPORT_SYMBOL(exitCounter);
 
 static u32 xstate_required_size(u64 xstate_bv, bool compacted)
 {
@@ -1211,6 +1221,24 @@ bool kvm_cpuid(struct kvm_vcpu *vcpu, u32 *eax, u32 *ebx,
 }
 EXPORT_SYMBOL_GPL(kvm_cpuid);
 
+// added for homework 2 & 3
+
+static int checkTheType(u32 e){
+    if(e == 3 || e == 4 || e == 5 || e == 6 || e == 11 || e == 16 || e == 17 || e == 33 || e == 34 || e == 51 || e == 54 || e == 63 || e == 64 || e == 66 || e == 67 || e == 68) {
+		return 1;
+	}
+	else {
+		return 0;
+    }
+}
+static int checkType(u32 e){
+    if(e <= 0 || e >= 68 || e == 35 || e == 38 || e == 42 || e == 65) {
+		return 0;
+	}
+	else {
+		return 1;
+    }
+}
 int kvm_emulate_cpuid(struct kvm_vcpu *vcpu)
 {
 	u32 eax, ebx, ecx, edx;
@@ -1220,7 +1248,40 @@ int kvm_emulate_cpuid(struct kvm_vcpu *vcpu)
 
 	eax = kvm_rax_read(vcpu);
 	ecx = kvm_rcx_read(vcpu);
-	kvm_cpuid(vcpu, &eax, &ebx, &ecx, &edx, false);
+	
+	if (eax == 0x4fffffff){
+		eax = exitNumber;
+		ecx = exitTime & 0xffffffff;
+		ebx = (exitTime >> 32) & 0xffffffff;
+		printk(KERN_INFO "The total number of exits (all types) in eax=%u", eax);
+		printk(KERN_INFO "High 32 bits of the total time spent in ebx=%u", ebx);
+		printk(KERN_INFO "Low 32 bits of the total time spent in ecx=%u", ecx);
+	} else if ( eax == 0x4ffffffe ) {
+		uint32_t theCount;
+		if (checkType(ecx)) {
+			if (checkTheType(eax)) {
+				printk(KERN_INFO "exit reason number %u unenabled", ecx);
+				eax = 0;
+				ebx = 0;
+				ecx = 0;
+				edx = 0;
+			} else {
+				eax = exitCounter[ecx];
+				theCount = exitCounter[ecx];
+				printk(KERN_INFO "exit reason number %u, exit counter eax %u", ecx, eax);
+				printk(KERN_INFO "exit number %d exits %d\n", ecx, theCount);
+			}
+		} else {
+			printk(KERN_INFO "exit reason number=%u not defined in SDM", ecx);
+			eax = 0;
+			ebx = 0;
+			ecx = 0;
+			edx = 0;
+		}
+	} else {
+		kvm_cpuid(vcpu, &eax, &ebx, &ecx, &edx, false);
+	}
+	
 	kvm_rax_write(vcpu, eax);
 	kvm_rbx_write(vcpu, ebx);
 	kvm_rcx_write(vcpu, ecx);
